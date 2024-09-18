@@ -21,6 +21,7 @@ class MessageBroker:
                     if not request:
                         break
                     command, topic, *message = request.split('#')
+                    
                     if command == 'createTopic':
                         self.create_topic(topic, client_socket)
                     elif command == 'deleteTopic':
@@ -40,9 +41,11 @@ class MessageBroker:
         except Exception as e:
             print(f"An error occurred: {e}")
         finally:
+            # Clean up the client from all topics if it disconnects
+            self.cleanup_subscriber(client_socket)
             print(f"Closing connection with client: {client_socket.getpeername()}")
             client_socket.close()
-        
+
     def create_topic(self, topic, client_socket):
         with self.lock:
             if topic not in self.topics:
@@ -94,14 +97,22 @@ class MessageBroker:
             if topic in self.topics and client_socket in self.subscribers[topic]:
                 messages = self.topics[topic]
                 if messages:
-                    for subscribers in self.subscribers[topic]:
-                        for message in messages:
-                            subscribers.send(f"Message from {topic}: {message}".encode('utf-8'))
+                    # Send all stored messages to the client
+                    for message in messages:
+                        client_socket.send(f"Message from {topic}: {message}".encode('utf-8'))
                     self.topics[topic] = []  # Clear messages after pulling
-                else:
-                    client_socket.send("No new messages.".encode('utf-8'))
+                # else:
+                #     client_socket.send("No new messages.".encode('utf-8'))
             else:
                 client_socket.send("Topic does not exist or not subscribed.".encode('utf-8'))
+                
+    def cleanup_subscriber(self, client_socket):
+        # Remove the client_socket from all topics it is subscribed to
+        with self.lock:
+            for topic, subscribers in self.subscribers.items():
+                if client_socket in subscribers:
+                    subscribers.remove(client_socket)
+                    print(f"Removed subscriber from topic: {topic}")
 
     def start(self, host='localhost', port=5555):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -1,4 +1,6 @@
 import socket
+import time
+import argparse
 
 class Subscriber:
     def __init__(self, host='localhost', port=5555) -> None:
@@ -18,12 +20,26 @@ class Subscriber:
             except socket.error as e:
                 print(f"Error during subscription: {e}")
     
+    def listen_for_messages(self, topic):
+        if self.client:
+            print(f"Listening for new messages on topic '{topic}'...")
+            try:
+                while True:
+                    self.pull(topic)
+                    time.sleep(5)  # Sleep to simulate interval-based pulling
+            except KeyboardInterrupt:
+                print("\nSubscription stopped by user.")
+                self.disconnect()
+            except socket.error as e:
+                print(f"Error while listening for messages: {e}")
+    
     def pull(self, topic):
         if self.client:
             try:
                 self._send_message(f"pull#{topic}")
                 response = self._receive_message()
-                print("Pulled Response is: ", response)
+                if response:
+                    print(f"New Message on '{topic}': {response}")
             except socket.error as e:
                 print(f"Error pulling messages: {e}")
     
@@ -38,7 +54,7 @@ class Subscriber:
             return self.client.recv(1024).decode('utf-8')
         except socket.error as e:
             print(f"Error receiving message: {e}")
-            return "Error"
+            return None
 
     def disconnect(self):
         if self.client:
@@ -49,32 +65,25 @@ class Subscriber:
                 print(f"Error closing connection: {e}")
 
 def main():
-    subscriber1 = Subscriber()
-    subscriber2 = Subscriber()
-    subscriber3 = Subscriber()
-    subscriber4 = Subscriber()
-    subscriber5 = Subscriber()
+    parser = argparse.ArgumentParser(description="Subscriber for message broker")
+    
+    # Define command-line arguments
+    parser.add_argument("--subscribe", type=str, help="Subscribe to the topic")
+    
+    args = parser.parse_args()
+    print(args)
+    # Initialize the publisher
+    subscriber = Subscriber()
 
-    # Subscribe to topic
-    subscriber1.subscribe("Shaswat")
-    subscriber2.subscribe("Shaswat")
-    subscriber3.subscribe("Shaswat")
-    subscriber4.subscribe("Shaswat")
-    subscriber5.subscribe("Shaswat")
+    # Handle --create flag to create a topic
+    if args.subscribe:
+        topic = args.subscribe
+        print(f"Subscribin topic: {topic}")
+        subscriber.subscribe(topic)
 
-    # Pull messages from topic
-    subscriber1.pull("Shaswat")
-    subscriber2.pull("Shaswat")
-    subscriber3.pull("Shaswat")
-    subscriber4.pull("Shaswat")
-    subscriber5.pull("Shaswat")
-
-    # Disconnect
-    subscriber1.disconnect()
-    subscriber2.disconnect()
-    subscriber3.disconnect()
-    subscriber4.disconnect()
-    subscriber5.disconnect()
+    subscriber.listen_for_messages(topic)
+    # Close the connection
+    subscriber.disconnect()
 
 if __name__ == "__main__":
     main()
