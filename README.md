@@ -83,11 +83,20 @@ python3 subscriber.py --subscribe my_topic
 - Inline code comments are provided to explain the functionality of each component.
 
 
-## Evaluation and Benchmarking
+## Benchmarking
+- To run performance benchmarks for the message broker, use the provided benchmarking scripts. For example:
 
-- The system includes evaluation scenarios and benchmarking tests to measure server throughput and performance under different conditions.
-- Benchmark results and system design discussions can be found in the `reports` PDF in zip folder.
+- Run the createTopic benchmark:
 
+```bash
+python3 benchmark_createTopic.py
+```
+Run the send message benchmark:
+
+```bash
+python3 benchmark_send.py
+```
+- These scripts will simulate multiple clients and measure throughput for different operations. Detailed results will be printed to the console
 ## Contributing
 
 Contributions are welcome! If you find any issues or have suggestions for improvements, please open an issue or submit a pull request.
