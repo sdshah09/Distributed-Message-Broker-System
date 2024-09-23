@@ -21,13 +21,15 @@ class AsyncMessageBroker:
                     # Decode and parse the client request
                     request = data.decode().strip()
                     command, topic, *message = request.split('#')
-
+                    # print(request)
                     # Handle different commands based on the client request
                     if command == 'createTopic':
                         await self.create_topic(topic, writer)
                     elif command == 'deleteTopic':
                         await self.delete_topic(topic, writer)
                     elif command == 'send':
+                        # print("In send")
+                        # print(''.join(message))
                         await self.send_message(topic, ''.join(message), writer)
                     elif command == 'subscribe':
                         await self.subscribe(topic, writer)
@@ -54,6 +56,7 @@ class AsyncMessageBroker:
 
     async def create_topic(self, topic, writer):
             # Create a new topic if it doesn't exist
+            print("Create Topic")
             if topic not in self.topics:
                 self.topics[topic] = []
                 await self.send_response(writer, "Topic created successfully.")
@@ -71,8 +74,12 @@ class AsyncMessageBroker:
 
     async def send_message(self, topic, message, writer):
         # Send a message to a topic
+        print("In send message function: ",self.topics)
+        print(topic)
         if topic in self.topics:
+            print("Inside send message function: ",self.topics)
             self.topics[topic].append(message)
+            print(self.topics[topic])
             print(f"Message sent: {message} to topic {topic}")
 
             # Broadcast the message to all subscribers of the topic
@@ -88,6 +95,7 @@ class AsyncMessageBroker:
 
     async def subscribe(self, topic, writer):
         # Subscribe a client to a topic
+        print(self.topics)
         if topic not in self.topics:
             await self.send_response(writer, f"Topic {topic} does not exist.")
         else:
