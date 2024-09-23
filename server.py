@@ -1,132 +1,135 @@
-import socket
-import threading
+import asyncio
 from collections import defaultdict
 
-class MessageBroker:
+class AsyncMessageBroker:
     def __init__(self) -> None:
         self.topics = defaultdict(list)  # Store messages per topic
         self.subscribers = defaultdict(list)  # Store subscribers (client_socket) per topic
-        self.lock = threading.Lock()  # Ensure thread-safe access
 
-    def handle_client(self, client_socket):
-        def print_thread_id():
-            thread_id = threading.get_ident()
-            print(f"Thread ID: {thread_id}")
-        print_thread_id()
+    async def handle_client(self, reader, writer):
+        client_address = writer.get_extra_info('peername')
+        print(f"New client connected: {client_address}")
 
         try:
             while True:
+                # Read data from the client
                 try:
-                    request = client_socket.recv(1024).decode('utf-8')
-                    if not request:
+                    data = await reader.read(1024)
+                    if not data:
                         break
-                    command, topic, *message = request.split('#')
-                    
-                    if command == 'createTopic':
-                        self.create_topic(topic, client_socket)
-                    elif command == 'deleteTopic':
-                        self.delete_topic(topic, client_socket)
-                    elif command == 'send':
-                        self.send_message(topic, ''.join(message), client_socket)
-                    elif command == 'subscribe':
-                        self.subscribe(topic, client_socket)
-                    elif command == 'pull':
-                        self.pull_messages(topic, client_socket)
-                except ConnectionResetError:
-                    print("Connection reset by client.")
-                    break
-                except BrokenPipeError:
-                    print("Broken pipe error. The client may have disconnected.")
-                    break
-        except Exception as e:
-            print(f"An error occurred: {e}")
-        finally:
-            # Clean up the client from all topics if it disconnects
-            self.cleanup_subscriber(client_socket)
-            print(f"Closing connection with client: {client_socket.getpeername()}")
-            client_socket.close()
 
-    def create_topic(self, topic, client_socket):
-        with self.lock:
+                    # Decode and parse the client request
+                    request = data.decode().strip()
+                    command, topic, *message = request.split('#')
+
+                    # Handle different commands based on the client request
+                    if command == 'createTopic':
+                        await self.create_topic(topic, writer)
+                    elif command == 'deleteTopic':
+                        await self.delete_topic(topic, writer)
+                    elif command == 'send':
+                        await self.send_message(topic, ''.join(message), writer)
+                    elif command == 'subscribe':
+                        await self.subscribe(topic, writer)
+                    elif command == 'pull':
+                        await self.pull_messages(topic, writer)
+                except ConnectionResetError:
+                    print(f"Connection reset by peer: {client_address}")
+                    break
+                except Exception as e:
+                    print(f"Error handling client {client_address}: {e}")
+                    break
+
+        except Exception as e:
+            print(f"Unhandled exception for client {client_address}: {e}")
+        finally:
+            # Clean up the subscriber and close the connection when the client disconnects
+            print(f"Client disconnected: {client_address}")
+            await self.cleanup_subscriber(writer)
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except ConnectionResetError:
+                print(f"Connection already reset: {client_address}")
+
+    async def create_topic(self, topic, writer):
+            # Create a new topic if it doesn't exist
             if topic not in self.topics:
                 self.topics[topic] = []
-                client_socket.send("Topic created successfully.".encode('utf-8'))
+                await self.send_response(writer, "Topic created successfully.")
             else:
-                client_socket.send("Topic already exists.".encode('utf-8'))
+                await self.send_response(writer, "Topic already exists.")
 
-    def delete_topic(self, topic, client_socket):
-        with self.lock:
-            if topic in self.topics:
-                del self.topics[topic]
-                del self.subscribers[topic]
-                client_socket.send("Topic deleted successfully.".encode('utf-8'))
+    async def delete_topic(self, topic, writer):
+        # Delete a topic if it exists
+        if topic in self.topics:
+            del self.topics[topic]
+            del self.subscribers[topic]
+            await self.send_response(writer, "Topic deleted successfully.")
+        else:
+            await self.send_response(writer, "Topic does not exist.")
+
+    async def send_message(self, topic, message, writer):
+        # Send a message to a topic
+        if topic in self.topics:
+            self.topics[topic].append(message)
+            print(f"Message sent: {message} to topic {topic}")
+
+            # Broadcast the message to all subscribers of the topic
+            for subscriber_writer in self.subscribers[topic]:
+                try:
+                    await self.send_response(subscriber_writer, f"Message from {topic}: {message}")
+                except Exception:
+                    print(f"Failed to send message to subscriber.")
+            
+            await self.send_response(writer, f"Message sent to topic {topic} successfully.")
+        else:
+            await self.send_response(writer, f"Topic {topic} does not exist.")
+
+    async def subscribe(self, topic, writer):
+        # Subscribe a client to a topic
+        if topic not in self.topics:
+            await self.send_response(writer, f"Topic {topic} does not exist.")
+        else:
+            if writer not in self.subscribers[topic]:
+                self.subscribers[topic].append(writer)
+                await self.send_response(writer, f"Subscribed to topic {topic} successfully.")
             else:
-                client_socket.send("Topic does not exist.".encode('utf-8'))
+                await self.send_response(writer, f"Already subscribed to topic {topic}.")
 
-    def send_message(self, topic, message, client_socket):
-        with self.lock:
-            if topic in self.topics:
-                self.topics[topic].append(message)
-                print(f"Message sent: {message} to topic {topic}")
+    async def pull_messages(self, topic, writer):
+        # Pull messages from a topic for a subscribed client
+        if topic in self.topics and writer in self.subscribers[topic]:
+            messages = self.topics[topic]
+            if messages:
+                for message in messages:
+                    await self.send_response(writer, f"Message from {topic}: {message}")
+                self.topics[topic] = []  # Clear messages after pulling
+            # else:
+                # await self.send_response(writer, "No new messages.")
+        else:
+            await self.send_response(writer, "Topic does not exist or not subscribed.")
 
-                # Send message to all subscribers of the topic
-                for subscriber_socket in self.subscribers[topic]:
-                    try:
-                        subscriber_socket.send(f"Message from {topic}: {message}".encode('utf-8'))
-                    except (ConnectionResetError, BrokenPipeError):
-                        print("A subscriber has disconnected.")
-                
-                client_socket.send(f"Message sent to topic {topic} successfully.".encode('utf-8'))
-            else:
-                client_socket.send(f"Topic {topic} does not exist.".encode('utf-8'))
+    async def cleanup_subscriber(self, writer):
+        # Remove a subscriber from all subscribed topics when the client disconnects
+        for topic, subscribers in self.subscribers.items():
+            if writer in subscribers:
+                subscribers.remove(writer)
+                print(f"Removed subscriber from topic: {topic}")
 
-    def subscribe(self, topic, client_socket):
-        with self.lock:
-            if topic not in self.topics:
-                client_socket.send(f"Topic {topic} does not exist.".encode('utf-8'))
-                return
+    async def send_response(self, writer, message):
+        # Send a response message to the client
+        writer.write((message + "\n").encode('utf-8'))
+        await writer.drain()
 
-            if client_socket not in self.subscribers[topic]:
-                self.subscribers[topic].append(client_socket)
-                client_socket.send(f"Subscribed to topic {topic} successfully.".encode('utf-8'))
-            else:
-                client_socket.send(f"Already subscribed to topic {topic}.".encode('utf-8'))
-
-    def pull_messages(self, topic, client_socket):
-        with self.lock:
-            if topic in self.topics and client_socket in self.subscribers[topic]:
-                messages = self.topics[topic]
-                if messages:
-                    # Send all stored messages to the client
-                    for message in messages:
-                        client_socket.send(f"Message from {topic}: {message}".encode('utf-8'))
-                    self.topics[topic] = []  # Clear messages after pulling
-                # else:
-                #     client_socket.send("No new messages.".encode('utf-8'))
-            else:
-                client_socket.send("Topic does not exist or not subscribed.".encode('utf-8'))
-                
-    def cleanup_subscriber(self, client_socket):
-        # Remove the client_socket from all topics it is subscribed to
-        with self.lock:
-            for topic, subscribers in self.subscribers.items():
-                if client_socket in subscribers:
-                    subscribers.remove(client_socket)
-                    print(f"Removed subscriber from topic: {topic}")
-
-    def start(self, host='localhost', port=5555):
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind((host, port))
-        server.listen(5)
+    async def start_server(self, host='localhost', port=5555):
+        # Start the server and listen for client connections
+        server = await asyncio.start_server(self.handle_client, host, port)
         print(f"Server started on {host}:{port}")
 
-        while True:
-            client_socket, addr = server.accept()
-            print(f"New connection from {addr}")
-            client_handler = threading.Thread(target=self.handle_client, args=(client_socket,))
-            client_handler.start()
+        async with server:
+            await server.serve_forever()
 
 if __name__ == "__main__":
-    broker = MessageBroker()
-    broker.start()
+    broker = AsyncMessageBroker()
+    asyncio.run(broker.start_server())
