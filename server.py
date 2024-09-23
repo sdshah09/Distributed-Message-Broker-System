@@ -56,7 +56,7 @@ class AsyncMessageBroker:
 
     async def create_topic(self, topic, writer):
             # Create a new topic if it doesn't exist
-            print("Create Topic")
+            print(f"Create Topic: {self.topics}")
             if topic not in self.topics:
                 self.topics[topic] = []
                 await self.send_response(writer, "Topic created successfully.")

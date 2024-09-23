@@ -56,7 +56,8 @@ def main():
     # Define command-line arguments
     parser.add_argument("--create", type=str, help="Create a new topic")
     parser.add_argument("--publish", nargs=2, metavar=('topic', 'message'), help="Publish a message to a topic")
-    
+    parser.add_argument("--delete", type=str, help="Delete the existing topic")
+
     # Parse the command-line arguments
     args = parser.parse_args()
     print(args)
@@ -75,7 +76,11 @@ def main():
         topic, message = args.publish
         print(f"Publishing message to topic {topic}: {message}")
         publisher.send(1, topic, message)
-
+    
+    if args.delete:
+        topic = args.delete
+        print(f"Deleting Topic: {topic}")
+        publisher.deleteTopic(1,topic)
     # Close the connection
     # publisher.disconnect()
 

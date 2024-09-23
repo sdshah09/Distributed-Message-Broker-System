@@ -14,11 +14,11 @@ This is a distributed message broker system that follows the Publisher-Subscribe
 - The system supports multiple publishers and subscribers, allowing for a distributed and scalable architecture.
 - The message broker ensures that messages are delivered to all subscribers of a topic.
 - Subscribers can pull new messages from the message broker for the topics they are subscribed to.
-- The message broker performs garbage collection of message buffers when all subscribers have read the messages.
 
 ## Prerequisites
 
 - Python 3.x
+- Install required dependencies (if any, e.g., asyncio or other libraries).
 
 ## Getting Started
 
@@ -29,30 +29,64 @@ This is a distributed message broker system that follows the Publisher-Subscribe
 
 ### Publisher
 
+Running the Message Broker (Server)
+Start the message broker (server) by running the server.py file:
+```bash
+python3 server.py
+```
+This starts the message broker on localhost:5555 by default. The server will listen for connections from both publishers and subscribers.
+You should see the following output, indicating the server is running:
+```text
+Server started on localhost:5555
+```
+### Running a Publisher
+- Open a new terminal window.
+- Run the publisher.py script:
+```bash
+python3 publisher.py --create my_topic
+```
+- This command creates a new topic named my_topic and registers the publisher.
+- To publish a message to the my_topic topic:
+```python
+python3 publisher.py --publish my_topic "Hello, world!"
+```
+
+- You should see confirmation that the message was successfully sent.
+Additional commands for the publisher include:
+- Create a topic: ```python3 publisher.py --create my_topic```
+- Send a message: ```python3 publisher.py --publish my_topic "Your message here"```
+- Delete a topic: ```python3 publisher.py --delete my_topic```
+
 - Register as a publisher using the `registerPublisher()` function.
 - Create topics using the `createTopic(topic)` function.
 - Publish messages to a topic using the `send(topic, message)` function.
 - Delete topics using the `deleteTopic(topic)` function.
 
-### Subscriber
+## Subscriber
+  ### Open another new terminal window.
+- Run the subscriber.py script to subscribe to a topic:
+```bash
+python3 subscriber.py --subscribe my_topic
+```
+
 
 - Register as a subscriber using the `registerSubscriber()` function.
 - Subscribe to topics of interest using the `subscribe(topic)` function.
 - Pull new messages from subscribed topics using the `pull(topic)` function.
 
-## Configuration
+    ### Configuration
 
 - The message broker listens on `localhost` and port `5555` by default. You can modify these settings in the `server.py` file.
 
 ## Documentation
 
 - Inline code comments are provided to explain the functionality of each component.
-- API manual pages and detailed documentation can be found in the `docs` directory.
+
 
 ## Evaluation and Benchmarking
 
 - The system includes evaluation scenarios and benchmarking tests to measure server throughput and performance under different conditions.
-- Benchmark results and system design discussions can be found in the `reports` directory.
+- Benchmark results and system design discussions can be found in the `reports` PDF in zip folder.
 
 ## Contributing
 
